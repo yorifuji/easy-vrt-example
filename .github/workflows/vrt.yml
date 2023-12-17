@@ -1,0 +1,82 @@
+name: vrt
+
+run-name: visual regression test
+
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lookup:
+    runs-on: ubuntu-latest
+    outputs:
+      actual-sha: ${{ steps.lookup.outputs.actual-sha }}
+      actual-cache-hit: ${{ steps.lookup.outputs.actual-cache-hit }}
+      expected-sha: ${{ steps.lookup.outputs.expected-sha }}
+      expected-cache-hit: ${{ steps.lookup.outputs.expected-cache-hit }}
+    steps:
+      - uses: yorifuji/easy-vrt@main
+        id: lookup
+        with:
+          mode: lookup
+
+  expected:
+    if: ${{ !cancelled() && !failure() && needs.lookup.outputs.expected-cache-hit != 'true' }}
+    needs: lookup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.lookup.outputs.expected-sha }}
+
+      # >>> write your code to create expected image
+
+      - run: |
+          mkdir -p your-expected-image-dir
+          cp test.png your-expected-image-dir
+
+      # <<< write your code to create expected image
+
+      - uses: yorifuji/easy-vrt@main
+        with:
+          mode: expected
+          expected-dir: your-expected-image-dir # set the directory where the expected image is stored
+          expected-cache-key: ${{ needs.lookup.outputs.expected-sha }}
+
+  actual:
+    if: ${{ !cancelled() && !failure() && needs.lookup.outputs.actual-cache-hit != 'true' }}
+    needs: lookup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.lookup.outputs.actual-sha }}
+
+      # >>> write your code to create actual image
+
+      - run: |
+          mkdir -p your-actual-image-dir
+          cp test.png your-actual-image-dir
+
+      # <<< write your code to create actual image
+
+      - uses: yorifuji/easy-vrt@main
+        with:
+          mode: actual
+          actual-dir: your-actual-image-dir # set the directory where the actual image is stored
+          actual-cache-key: ${{ needs.lookup.outputs.actual-sha }}
+
+  compare:
+    if: ${{ !cancelled() && !failure() }}
+    needs: [lookup, expected, actual]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: yorifuji/easy-vrt@main
+        with:
+          mode: compare
+          expected-cache-key: ${{ needs.lookup.outputs.expected-sha }}
+          actual-cache-key: ${{ needs.lookup.outputs.actual-sha }}
+          summary-comment: true
+          review-comment: true
